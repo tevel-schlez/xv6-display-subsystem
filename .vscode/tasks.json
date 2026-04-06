@@ -18,6 +18,18 @@
 			},
 		},
 		{
+			"label": "run-web-xv6",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"qemu-web"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": []
+		},
+		{
 			"label": "run-gdb-backend-xv6",
 			"type": "shell",
 			"command": "make",

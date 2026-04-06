@@ -28,7 +28,9 @@ main()
     iinit();         // inode table
     fileinit();      // file table
     virtio_disk_init(); // emulated hard disk
+    virtio_gpu_init();  // virtio GPU display window
     userinit();      // first user process
+    kproc_create(display_daemon, "displaydaemon"); // GPU auto-commit daemon
     __sync_synchronize();
     started = 1;
   } else {

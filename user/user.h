@@ -22,6 +22,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int flip_display(void *buf);
+void *map_display(void *addr);
 
 // ulib.c
 int stat(const char*, struct stat*);

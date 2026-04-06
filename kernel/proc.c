@@ -254,6 +254,21 @@ userinit(void)
   release(&p->lock);
 }
 
+// Create a kernel process that starts executing fn() with no user memory.
+// Used to create background kernel threads (e.g., display_daemon).
+void
+kproc_create(void (*fn)(void), const char *name)
+{
+  struct proc *p = allocproc();
+  if(p == 0)
+    panic("kproc_create");
+  p->context.ra = (uint64)fn;
+  p->context.sp = p->kstack + PGSIZE;
+  safestrcpy(p->name, name, sizeof(p->name));
+  p->state = RUNNABLE;
+  release(&p->lock);
+}
+
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
 int
