@@ -23,7 +23,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int flip_display(void *buf);
-void *map_display(void *addr);
+void *map_display(void *addr); //task 1
 
 // ulib.c
 int stat(const char*, struct stat*);

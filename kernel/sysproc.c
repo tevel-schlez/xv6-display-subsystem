@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 
+extern uint64 get_fb_page(int index); //helper function to get the physical address of fb[index]
+
 uint64
 sys_exit(void)
 {
@@ -114,7 +116,24 @@ sys_flip_display(void)
 //
 // TODO: Students implement this syscall.
 uint64
-sys_map_display(void)
+sys_map_display(void) //task 1
 {
-  return -1;
+  struct proc *p = myproc();
+  uint64 display_size = 300*PGSIZE; // 640x480x4 
+
+  uint64 addr = PGROUNDUP(p->sz); // start mapping at the next page boundary above p->sz
+  uint64 current = addr;
+
+  for(int i=0; i<300; i++) {
+    // Map each framebuffer page into the process's address space
+    int error = mappages(p->pagetable, current, PGSIZE, get_fb_page(i), PTE_U|PTE_R|PTE_W); //read, write, user
+    if (error < 0) {
+      return -1; // mapping failed
+    }
+    current += PGSIZE; // move to the next page
+  }
+
+  p->sz = addr + display_size; // update process size to include the new mapping
+
+  return addr; // return the mapped virtual address
 }
