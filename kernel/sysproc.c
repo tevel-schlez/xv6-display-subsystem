@@ -103,7 +103,65 @@ sys_uptime(void)
 uint64
 sys_flip_display(void)
 {
-  return -1;
+  struct proc *p = myproc();
+  uint64 display_size = 300 * PGSIZE;
+  uint64 user_buffer;
+  uint64 display_va = 0;
+
+  argaddr(0, &user_buffer); //get the first argument passed by user
+
+  //validate the user buffer address
+  //1.it must be page-aligned (checked by user_buffer % PGSIZE == 0)
+  //2.it must be fully mapped in the process's address space
+  if ((user_buffer % PGSIZE) != 0 || user_buffer + display_size >= MAXVA || user_buffer + display_size > p->sz) { 
+    return -1;
+  }
+
+  //check that the entire user buffer is mapped and has user permissions
+  for (uint64 curr = user_buffer; curr < user_buffer + display_size; curr += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, curr, 0); //returns the column in the page table for the current virtual address
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) { //PTE_V = valid bit, PTE_U = user permission bit
+      return -1;
+    }
+  }
+
+  uint64 fb0 = get_fb_page(0); // get the physical address of fb[0] using the helper function get_fb_page
+  //find the virtual address in the current process's page table that maps to fb[0]
+  for (uint64 va = PGROUNDUP(p->sz - display_size); va < MAXVA; va += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte != 0 && (*pte & PTE_V) && PTE2PA(*pte) == fb0) { //PTE2PA extracts the physical address from the PTE, we check if it matches fb0
+      display_va = va;
+      break;
+    }
+  }
+
+  if (display_va == 0) { //if we cannot find a virtual address that maps to fb[0], it means the display is not currently mapped in this process, so we cannot flip, return -1
+    return -1;
+  }
+
+  uint64 curr_user = user_buffer;
+  uint64 curr_disp = display_va;
+
+  //swap the PTEs for the user buffer and the display buffer, one page at a time, for all 300 pages
+  for (int i = 0; i < 300; i++) {
+    pte_t *pte_user = walk(p->pagetable, curr_user, 0);
+    pte_t *pte_disp = walk(p->pagetable, curr_disp, 0);
+
+    uint64 pa_user = PTE2PA(*pte_user);
+    uint64 pa_disp = PTE2PA(*pte_disp);
+
+    uint64 flags_user = PTE_FLAGS(*pte_user);
+    uint64 flags_disp = PTE_FLAGS(*pte_disp);
+
+    *pte_user = PA2PTE(pa_disp) | flags_user;
+    *pte_disp = PA2PTE(pa_user) | flags_disp;
+
+    curr_user += PGSIZE;
+    curr_disp += PGSIZE;
+  }
+  sfence_vma(); //after modifying the page tables, we need to flush the TLB to ensure that the CPU uses the updated mappings
+
+  return 0; 
 }
 
 // sys_map_display: map the GPU's kernel framebuffer pages (fb[]) directly
