@@ -114,7 +114,7 @@ sys_flip_display(void)
 //
 // TODO: Students implement this syscall.
 uint64
-sys_map_display(void)
+sys_map_display(void) //task 1
 {
   return -1;
 }
