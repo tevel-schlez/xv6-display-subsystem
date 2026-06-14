@@ -586,3 +586,36 @@ get_fb_page(int index) {
         return 0;
     return (uint64)fb[index];
 }
+
+int 
+virtio_gpu_flip(pagetable_t pagetable, uint64 user_buff)
+{
+    static struct virtio_gpu_mem_entry new_entries[FB_PAGES]; // temporary array to hold the new backing entries
+    uint64 va = user_buff;
+
+    //go through each page of the framebuffer and get the physical address from the page table
+    for (int i = 0; i < FB_PAGES; i++) {
+        pte_t *pte = walk(pagetable, va, 0);
+        if (pte == 0 || (*pte & PTE_V) == 0) {
+        return -1; 
+        }
+         
+        //update the new_entries array with the physical address and length of each page
+        new_entries[i].addr = PTE2PA(*pte); 
+        new_entries[i].length = PGSIZE;     
+        new_entries[i].padding = 0;
+        
+        va += PGSIZE;
+    }
+
+    //lock the gpu_lock to ensure that the flip operation is atomic and doesn't interfere with other GPU operations
+    acquire(&gpu_lock);
+    release(&gpu_lock);
+
+    //detach the current framebuffer backing and attach the new one using the new_entries array, then flush the transfer to update the display
+    gpu_cmd_detach();
+    gpu_cmd_attach(new_entries, FB_PAGES);
+    gpu_transfer_flush(); //flush the transfer to update the display with the new framebuffer content
+
+    return 0; 
+}
