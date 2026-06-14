@@ -6,6 +6,8 @@
 #include "defs.h"
 #include "fs.h"
 
+extern uint64 get_fb_page(int index); //helper function to get the physical address of fb[index]
+
 /*
  * the kernel's page table.
  */
@@ -188,7 +190,19 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      
+      //
+      int is_fb_page = 0;
+      for(int i=0; i<300; i++) { //check if the physical address is one of the framebuffer pages
+        if(pa == get_fb_page(i)) {
+          is_fb_page = 1;
+          break;
+        }
+      }
+
+      if(!is_fb_page) { //only free if it's not a framebuffer page
+        kfree((void*)pa);
+      }
     }
     *pte = 0;
   }
