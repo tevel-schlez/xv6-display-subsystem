@@ -116,5 +116,17 @@ sys_flip_display(void)
 uint64
 sys_map_display(void) //task 1
 {
-  return -1;
+  struct proc *p = myproc();
+  uint64 display_size = 300*PGSIZE; // 640x480x4 
+
+  uint64 addr = PGROUNDUP(p->sz); // start mapping at the next page boundary above p->sz
+
+  int error = mappages(p->pagetable, addr, display_size, (uint64)fb, PTE_U|PTE_R|PTE_W); //read, write, user
+  if (error < 0) {
+    return -1; // mapping failed
+  }
+
+  p->sz = addr + display_size; // update process size to include the new mapping
+
+  return addr; // return the mapped virtual address
 }
