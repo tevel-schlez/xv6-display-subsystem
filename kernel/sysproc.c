@@ -6,7 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 
-extern void *fb[300];
+extern uint64 get_fb_page(int index); //helper function to get the physical address of fb[index]
 
 uint64
 sys_exit(void)
@@ -126,7 +126,7 @@ sys_map_display(void) //task 1
 
   for(int i=0; i<300; i++) {
     // Map each framebuffer page into the process's address space
-    int error = mappages(p->pagetable, current, PGSIZE, (uint64)fb[i], PTE_U|PTE_R|PTE_W); //read, write, user
+    int error = mappages(p->pagetable, current, PGSIZE, get_fb_page(i), PTE_U|PTE_R|PTE_W); //read, write, user
     if (error < 0) {
       return -1; // mapping failed
     }
