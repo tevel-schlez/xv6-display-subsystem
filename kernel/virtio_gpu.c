@@ -580,7 +580,8 @@ void display_daemon(void)
 }
 
 // helpful for user-space display driver: return the physical address of fb[index].
-uint64 get_fb_page(int index) {
+uint64
+get_fb_page(int index) {
     if (index < 0 || index >= 300)
         return 0;
     return (uint64)fb[index];

@@ -116,24 +116,71 @@ sys_flip_display(void)
 //
 // TODO: Students implement this syscall.
 uint64
-sys_map_display(void) //task 1
+sys_map_display(void)  //task 1
 {
   struct proc *p = myproc();
-  uint64 display_size = 300*PGSIZE; // 640x480x4 
+  uint64 display_size = 300 * PGSIZE; 
+  uint64 addr;
 
-  uint64 addr = PGROUNDUP(p->sz); // start mapping at the next page boundary above p->sz
-  uint64 current = addr;
+  //getting the user virtual address from the syscall argument
+  //user_addr will be 0 if the user passed 0, which means the kernel should auto-select the VA
+  uint64 user_addr;
+  argaddr(0, &user_addr); 
 
-  for(int i=0; i<300; i++) {
-    // Map each framebuffer page into the process's address space
-    int error = mappages(p->pagetable, current, PGSIZE, get_fb_page(i), PTE_U|PTE_R|PTE_W); //read, write, user
-    if (error < 0) {
-      return -1; // mapping failed
+  //if the user gave a non-zero address, we need to validate it
+  //1.it must be page-aligned (checked by user_addr % PGSIZE == 0)
+  //2.it must be above the current process size (p->sz) to avoid overwriting existing memory
+  //3.it must not cause overflow beyond MAXVA
+  if (user_addr != 0) {
+    if ((user_addr % PGSIZE) != 0 || user_addr < p->sz || user_addr + display_size >= MAXVA)
+      return -1;
+    addr = user_addr; //if the address is valid, we will use it for mapping
+  } 
+  //if the user gave 0, we need to find the next available virtual address above p->sz that can fit the display_size
+  else {
+    addr = PGROUNDUP(p->sz);
+    
+    //going through the virtual address space starting from addr, checking for a contiguous range of free pages that can fit display_size
+    while (addr + display_size < MAXVA) {
+      int found_space = 1;
+      
+      //checking the next 300 pages (display_size) to see if they are all free (not mapped) in the current process's page table 
+      for (uint64 curr = addr; curr < addr + display_size; curr += PGSIZE) {
+        pte_t *pte = walk(p->pagetable, curr, 0); //returns the column in the page table
+        if (pte != 0 && (*pte & PTE_V)) { //if the pte is valid and the page is mapped, then this range is not free
+          found_space = 0;
+          break; 
+        }
+      }
+      
+      if (found_space) { //if we found a contiguous range of free pages that can fit the display, we will use this addr for mapping
+        break; 
+      }
+      
+      addr += PGSIZE;  //if not found, move to the next page and check again
     }
-    current += PGSIZE; // move to the next page
+    
+    if (addr + display_size >= MAXVA) //if we exit the loop without finding a suitable range, it means there is not enough virtual address space to map the display, so we return -1
+      return -1; 
   }
 
-  p->sz = addr + display_size; // update process size to include the new mapping
+  uint64 current = addr;
+  //after we foind a valid address space to contain the display, we start the actual mapping
+  for(int i = 0; i < 300; i++) {
+    uint64 pa = get_fb_page(i); //get the physical address of fb[i] using the helper function get_fb_page
+    int error = mappages(p->pagetable, current, PGSIZE, pa, PTE_U|PTE_R|PTE_W); //read, write, user premmissions
+    if (error < 0) { //if mappages returns -1 , mapping falied
+      if (current > addr) { //if we have mapped some pages successfully before the failure, we need to unmap those pages to clean up
+        uvmunmap(p->pagetable, addr, (current - addr) / PGSIZE, 0);
+      }
+      return -1;
+    }
+    current += PGSIZE;
+  }
 
-  return addr; // return the mapped virtual address
+  if (addr + display_size > p->sz) { //if the mapped display continues beyond the current process size, we need to update p->dz, so that the process knows that it's memory grew
+    p->sz = addr + display_size;
+  }
+
+  return addr; 
 }
