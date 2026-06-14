@@ -106,63 +106,38 @@ sys_flip_display(void)
   struct proc *p = myproc();
   uint64 display_size = 300 * PGSIZE;
   uint64 user_buffer;
-  uint64 display_va = 0;
+  argaddr(0, &user_buffer); //get the user virtual address of the framebuffer from the syscall argument
 
-  argaddr(0, &user_buffer); //get the first argument passed by user
+  if (user_buffer < 0) { //if the user passed a negative address, it's invalid, so we return -1
+    return -1;
+  }
 
-  //validate the user buffer address
+  //validate the user_buffer:
   //1.it must be page-aligned (checked by user_buffer % PGSIZE == 0)
-  //2.it must be fully mapped in the process's address space
-  if ((user_buffer % PGSIZE) != 0 || user_buffer + display_size >= MAXVA || user_buffer + display_size > p->sz) { 
+  //2.it must be fully mapped in the calling process's address space 
+  if ((user_buffer % PGSIZE) != 0) {
+    return -1;
+  }
+  if (user_buffer + display_size >= MAXVA || user_buffer + display_size > p->sz) {
     return -1;
   }
 
-  //check that the entire user buffer is mapped and has user permissions
+  //go through each page of the framebuffer and check if it's mapped in the process's page table
   for (uint64 curr = user_buffer; curr < user_buffer + display_size; curr += PGSIZE) {
-    pte_t *pte = walk(p->pagetable, curr, 0); //returns the column in the page table for the current virtual address
-    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) { //PTE_V = valid bit, PTE_U = user permission bit
-      return -1;
+    pte_t *pte = walk(p->pagetable, curr, 0);
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) { //PTE_V checks if the page is valid/mapped, PTE_U checks if it's user accessible
+      return -1; 
     }
   }
 
-  uint64 fb0 = get_fb_page(0); // get the physical address of fb[0] using the helper function get_fb_page
-  //find the virtual address in the current process's page table that maps to fb[0]
-  for (uint64 va = PGROUNDUP(p->sz - display_size); va < MAXVA; va += PGSIZE) {
-    pte_t *pte = walk(p->pagetable, va, 0);
-    if (pte != 0 && (*pte & PTE_V) && PTE2PA(*pte) == fb0) { //PTE2PA extracts the physical address from the PTE, we check if it matches fb0
-      display_va = va;
-      break;
-    }
-  }
-
-  if (display_va == 0) { //if we cannot find a virtual address that maps to fb[0], it means the display is not currently mapped in this process, so we cannot flip, return -1
+  //if the user_buffer is valid, we will call the helper function virtio_gpu_flip to perform the actual page flip operation
+  if (virtio_gpu_flip(p->pagetable, user_buffer) < 0) {
     return -1;
   }
 
-  uint64 curr_user = user_buffer;
-  uint64 curr_disp = display_va;
-
-  //swap the PTEs for the user buffer and the display buffer, one page at a time, for all 300 pages
-  for (int i = 0; i < 300; i++) {
-    pte_t *pte_user = walk(p->pagetable, curr_user, 0);
-    pte_t *pte_disp = walk(p->pagetable, curr_disp, 0);
-
-    uint64 pa_user = PTE2PA(*pte_user);
-    uint64 pa_disp = PTE2PA(*pte_disp);
-
-    uint64 flags_user = PTE_FLAGS(*pte_user);
-    uint64 flags_disp = PTE_FLAGS(*pte_disp);
-
-    *pte_user = PA2PTE(pa_disp) | flags_user;
-    *pte_disp = PA2PTE(pa_user) | flags_disp;
-
-    curr_user += PGSIZE;
-    curr_disp += PGSIZE;
-  }
-  sfence_vma(); //after modifying the page tables, we need to flush the TLB to ensure that the CPU uses the updated mappings
-
-  return 0; 
+  return 0;
 }
+
 
 // sys_map_display: map the GPU's kernel framebuffer pages (fb[]) directly
 // into the calling process's address space with PTE_U|PTE_R|PTE_W.
