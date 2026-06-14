@@ -382,6 +382,10 @@ exit(int status)
 
   acquire(&wait_lock);
 
+  //
+  virtio_gpu_reset_to_kernel_fb(); // Reset the GPU to use the kernel framebuffer before exiting
+
+  
   // Give any children to init.
   reparent(p);
 

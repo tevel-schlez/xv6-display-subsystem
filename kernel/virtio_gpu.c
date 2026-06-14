@@ -619,3 +619,26 @@ virtio_gpu_flip(pagetable_t pagetable, uint64 user_buff)
 
     return 0; 
 }
+
+
+//added function
+//this function is used to reset the framebuffer backing to the original kernel framebuffer after a flip, 
+//it is called by the display daemon when it detects that the user-space display driver has exited or crashed, 
+//ensuring that the display continues to function correctly with the original kernel framebuffer.
+//It reuses the original_entries array to store the physical addresses of the original framebuffer pages and then reattaches them to the GPU.
+void
+virtio_gpu_reset_to_kernel_fb(void)
+{
+  static struct virtio_gpu_mem_entry original_entries[FB_PAGES]; //temporary array to hold the original framebuffer backing entries
+
+  //go through each page of the original framebuffer and get the physical address, then update the original entries array with the physical address and length of each page
+  for (int i = 0; i < FB_PAGES; i++) {
+    original_entries[i].addr = (uint64)fb[i];
+    original_entries[i].length = PGSIZE;
+    original_entries[i].padding = 0;
+  }
+
+  gpu_cmd_detach();
+  gpu_cmd_attach(original_entries, FB_PAGES);
+  gpu_transfer_flush();
+}
