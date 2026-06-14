@@ -177,12 +177,15 @@ int main(int argc, char *argv[])
         pos = max_chars;
 
     // Allocate a page-aligned framebuffer (FB_BYTES = 300 × PGSIZE).
-    uint32 *fb = (uint32 *)sbrk(FB_BYTES);
-    if (fb == (uint32 *)-1)
+    uint64 raw_mem = (uint64)sbrk(FB_BYTES + 4096);
+    if ((void*)raw_mem == (void*)-1)
     {
         fprintf(2, "show_flip: sbrk failed\n");
         exit(1);
     }
+
+    uint64 aligned_mem = (raw_mem + 4095) & ~(4095u);
+    uint32 *fb = (uint32 *)aligned_mem;
 
     // Clear to background.
     memset(fb, 0, FB_BYTES);
@@ -200,6 +203,11 @@ int main(int argc, char *argv[])
     {
         fprintf(2, "show_flip: flip_display failed\n");
         exit(1);
+    }
+
+    while (1)
+    {
+        sleep(10);
     }
 
     exit(0);
