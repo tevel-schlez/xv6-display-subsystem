@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 
+extern void *fb[300];
+
 uint64
 sys_exit(void)
 {
@@ -120,10 +122,15 @@ sys_map_display(void) //task 1
   uint64 display_size = 300*PGSIZE; // 640x480x4 
 
   uint64 addr = PGROUNDUP(p->sz); // start mapping at the next page boundary above p->sz
+  uint64 current = addr;
 
-  int error = mappages(p->pagetable, addr, display_size, (uint64)fb, PTE_U|PTE_R|PTE_W); //read, write, user
-  if (error < 0) {
-    return -1; // mapping failed
+  for(int i=0; i<300; i++) {
+    // Map each framebuffer page into the process's address space
+    int error = mappages(p->pagetable, current, PGSIZE, (uint64)fb[i], PTE_U|PTE_R|PTE_W); //read, write, user
+    if (error < 0) {
+      return -1; // mapping failed
+    }
+    current += PGSIZE; // move to the next page
   }
 
   p->sz = addr + display_size; // update process size to include the new mapping
